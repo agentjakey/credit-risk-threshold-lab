@@ -1,117 +1,148 @@
 # Credit Risk Model Stakeholder Summary
 
-**Prepared for:** [Stakeholder Name / Team]
-**Date:** [Date]
-**Analyst:** [Your Name]
+**Dataset:** UCI Default of Credit Card Clients (30,000 records; 29,965 after deduplication)  
+**Analysis date:** June 2026  
+**Models evaluated:** Logistic Regression, XGBoost  
+**Final recommendation:** XGBoost at classification threshold 0.20
 
 ---
 
 ## Decision context
 
-We trained two machine learning models to predict which loan applicants are likely to default. The goal is not to build a perfect predictor but to find the probability cutoff (threshold) that minimizes the total cost of errors, given what we know about what each type of mistake costs the organization.
+We built two machine learning models to estimate the probability that a credit card customer will default on payment next month. The models were trained on historical payment records from 29,965 customers and evaluated on a held-out test set of 5,993 customers who were not used during training.
+
+The goal is not to build a perfect predictor but to find the operating point -- the probability cutoff -- that minimizes the total cost of errors given what we know about the relative cost of each type of mistake.
 
 ---
 
 ## Positive class
 
-A positive prediction means the model flags the applicant as **high risk of default**. A negative prediction means the model considers the applicant **likely to repay**.
+A positive prediction means the model flags the customer as **high risk of defaulting next month**. A negative prediction means the model considers the customer likely to pay.
 
 ---
 
 ## Class imbalance
 
-In this dataset, defaulting borrowers are a minority. Roughly [X]% of the training cases resulted in a default. This matters because a naive model can appear highly accurate simply by predicting everyone will repay. We used techniques (balanced class weights, XGBoost's internal handling) to make the models sensitive to defaults, not just to the majority class.
+In this dataset, 6,630 of 29,965 customers (22.13%) defaulted in the following month. The remaining 23,335 (77.87%) did not default. This imbalance matters: a model that always predicts "no default" would be correct 77.87% of the time by doing nothing useful. Any evaluation that only looks at overall accuracy will be misled.
+
+Both models were configured with imbalance-aware settings:
+- Logistic regression used balanced class weights, which increase the training penalty for misclassifying defaulters.
+- XGBoost used a scale_pos_weight of 3.52, computed as the ratio of non-defaulters to defaulters in the training data (18,668 / 5,304 = 3.52).
 
 ---
 
 ## Why accuracy is not enough
 
-If 90% of borrowers repay, a model that always predicts repayment is 90% accurate on paper. It also catches zero defaults. Accuracy is the wrong scorecard here. We instead evaluate the model on:
+The naive baseline (predict no default for every customer) achieves 77.87% accuracy on the test set. Logistic regression at the default 0.50 threshold achieves only 68.65% accuracy -- lower than doing nothing.
 
-- **Recall**: What fraction of actual defaults did we catch?
-- **Precision**: Of everyone we flagged as risky, how many were actually risky?
-- **Expected cost**: Given our assumptions about what each type of error costs, what threshold minimizes the total bill?
+This seems counterintuitive but is not a failure. The logistic regression is configured to catch defaults, which means it predicts default more often. That reduces its overall accuracy while making it actually useful for the task. Accuracy penalizes this behavior unfairly because it treats both types of mistakes as equally bad. They are not.
+
+A missed default (false negative) costs far more than a flagged non-defaulter (false positive). The right scorecard is expected cost under realistic error cost assumptions, not accuracy.
 
 ---
 
-## Model comparison
+## Model comparison at the standard 0.50 threshold
 
-We trained two models and evaluated both across a range of decision thresholds.
+At the most commonly used classification threshold of 0.50:
 
-| Model | ROC-AUC | PR-AUC | Notes |
-|---|---|---|---|
-| Logistic Regression | [fill in after run] | [fill in after run] | Interpretable, fast, good baseline |
-| XGBoost | [fill in after run] | [fill in after run] | More flexible, often higher recall |
+| Model | Accuracy | Precision | Recall | F1 Score | ROC-AUC |
+|---|---|---|---|---|---|
+| Naive (predict no default) | 77.87% | N/A | 0% | N/A | N/A |
+| Logistic Regression | 68.65% | 37.56% | 62.97% | 47.06% | 0.7162 |
+| XGBoost | 75.27% | 45.74% | 63.20% | 53.07% | 0.7757 |
 
-Higher ROC-AUC means the model ranks risky borrowers above safe ones more consistently. PR-AUC is more informative for imbalanced datasets and measures how well the model balances catching defaults against flagging good customers.
+**Recall** is the fraction of actual defaulters the model correctly identified. **Precision** is the fraction of borrowers flagged as risky who actually were risky. XGBoost outperforms logistic regression on every metric.
+
+---
+
+## Why the 0.50 threshold is not optimal
+
+Moving the decision threshold below 0.50 allows the model to flag more borrowers as risky, catching more actual defaults (higher recall) while also flagging more good customers incorrectly (lower precision). Moving it above 0.50 does the opposite.
+
+The right threshold depends on the relative cost of each type of error. We used the following illustrative assumptions for this analysis:
+
+- **False positive cost: $500** -- A creditworthy customer is incorrectly flagged. They may be denied or offered worse terms. The lender loses potential revenue and a satisfied customer.
+- **False negative cost: $5,000** -- A defaulting customer is not flagged. The loan is extended and the lender absorbs the loss.
+
+**These cost figures are illustrative assumptions for this exercise only.** They are not based on actual loan sizes, recovery rates, or operational review costs. The right numbers for a production system must come from the credit risk and finance teams.
+
+Expected cost was computed as: (number of false positives x $500) + (number of false negatives x $5,000)
 
 ---
 
 ## Recommended threshold
 
-After sweeping thresholds from 0.10 to 0.90 and applying assumed costs:
+After sweeping every threshold from 0.05 to 0.95 for both models, the configuration that minimizes expected cost is:
 
-- **False positive cost:** $500 per case (a good borrower is denied or offered worse terms)
-- **False negative cost:** $5,000 per case (a defaulting borrower receives a loan and does not repay)
+**XGBoost at classification threshold 0.20**
 
-**Important:** These cost figures are illustrative assumptions for this exercise. They should be replaced with real estimates from finance, credit risk, or compliance before any operational decision is made.
+| Metric | Value |
+|---|---|
+| Recall (defaults caught) | 96.68% |
+| Precision (of flagged customers, truly risky) | 25.15% |
+| F1 Score | 0.3992 |
+| ROC-AUC | 0.7757 |
+| Expected cost on test set | $2,127,500 |
 
-The selected model and threshold after running the analysis:
-
-- **Model:** [fill in after run]
-- **Recommended threshold:** [fill in after run]
-- **Precision at this threshold:** [fill in after run]
-- **Recall at this threshold:** [fill in after run]
-- **Expected cost at this threshold:** [fill in after run]
-
----
-
-## False positive meaning
-
-When the model predicts default but the borrower would have repaid, this is a false positive. In practice, this means:
-
-- A creditworthy applicant is denied, offered worse terms, or flagged for additional review.
-- The organization loses potential revenue and risks customer dissatisfaction.
-- At scale, disproportionate false positive rates on any demographic group create regulatory and fairness risk.
+The runner-up is logistic regression at threshold 0.10, with an expected cost of $2,327,000 on the same test set. XGBoost saves approximately $199,500 in expected cost relative to logistic regression under these assumptions.
 
 ---
 
-## False negative meaning
+## What the confusion matrix means in plain English
 
-When the model predicts repayment but the borrower defaults, this is a false negative. In practice, this means:
+On the 5,993-customer test set, the recommended model (XGBoost at threshold 0.20) produces the following outcomes:
 
-- A loan is extended to a borrower who will not repay.
-- The organization absorbs the default loss.
-- Because default losses typically far exceed the cost of a denied loan, this is usually the more expensive error.
+**1,282 true positives** -- Customers who were correctly identified as high-risk. The model flags them; they would have defaulted. Intervention is warranted.
+
+**852 true negatives** -- Customers who were correctly identified as low-risk. The model does not flag them; they would not have defaulted.
+
+**3,815 false positives** -- Customers who were flagged as high-risk but would actually have repaid their loan. These customers are incorrectly treated as risky. At $500 per case, this group represents $1,907,500 in modeled cost.
+
+**44 false negatives** -- Customers who were predicted safe but actually defaulted. These are the loans the model fails to intercept. At $5,000 per case, this group represents $220,000 in modeled loss.
+
+The model catches 1,282 of 1,326 actual defaulters in the test set. It misses 44.
+
+---
+
+## Why the false positive rate is high
+
+The false positive rate at threshold 0.20 is high by design. When the cost of a missed default is ten times the cost of a false alarm, the cost-minimizing decision is to flag aggressively and accept many false positives in exchange for catching nearly all defaults.
+
+If the organization determines that the false positive rate is unacceptably high -- due to customer experience, fairness concerns, or operational review capacity -- the threshold can be raised. The table below shows the tradeoff:
+
+| Threshold | Defaults Caught | Defaults Missed | Non-Defaulters Flagged | Expected Cost |
+|---|---|---|---|---|
+| 0.20 | 1,282 of 1,326 | 44 | 3,815 of 4,667 | $2,127,500 |
+| 0.25 | 1,228 of 1,326 | 98 | 3,281 of 4,667 | $2,130,500 |
+| 0.30 | 1,158 of 1,326 | 168 | 2,694 of 4,667 | $2,187,000 |
+| 0.35 | 1,076 of 1,326 | 250 | 2,125 of 4,667 | $2,312,500 |
+| 0.50 | 838 of 1,326 | 488 | 994 of 4,667 | $2,937,000 |
+
+Moving from threshold 0.20 to 0.25 reduces incorrectly flagged customers from 3,815 to 3,281 (a reduction of 534) while catching 54 fewer defaults. The expected cost difference is only $3,000 under these assumptions. This near-flat cost region between 0.20 and 0.25 means the choice between them should be driven by operational considerations, not cost modeling alone.
 
 ---
 
 ## Business recommendation
 
-Based on the cost assumptions used in this analysis, the recommended operating threshold is [fill in after run]. At this threshold, the model is estimated to reduce expected losses by prioritizing recall on defaults while keeping the false positive rate manageable.
+Under the stated cost assumptions, deploy XGBoost at a classification threshold of 0.20. This configuration catches 96.68% of defaults in the test population while accepting a high rate of false alarms.
 
-Before using this threshold operationally:
+Before any operational deployment:
 
-1. Validate the cost assumptions with finance and credit risk teams.
-2. Stress test the threshold on held-out data from different time periods.
-3. Confirm that false positive rates are equitable across applicant subgroups.
-4. Establish a monitoring plan to track model performance after deployment.
+1. Replace the illustrative cost figures ($500 FP, $5,000 FN) with estimates grounded in actual loan portfolio data, average default loss, and operational review costs per flagged application.
+2. Validate the model on a separate historical cohort from a different time period to confirm that performance does not depend on a specific economic environment.
+3. Conduct a fairness audit: confirm that false positive rates are comparable across customer subgroups (by age, marital status, education level) to manage regulatory and reputational risk.
+4. Set a monitoring cadence. Model performance should be re-evaluated quarterly and retrained if the default rate or population characteristics shift materially.
 
 ---
 
 ## Limitations
 
-- The models were trained on [describe your dataset here]. Performance may not generalize to a different applicant population or economic environment.
-- The cost assumptions ($500 FP, $5,000 FN) are illustrative. Real costs depend on loan size, interest rate, recovery rate, and operational review costs.
-- This model does not incorporate macroeconomic signals, employment history depth, or behavioral data that would be available in a production underwriting system.
-- Model performance should be re-evaluated periodically as the borrower population and economic conditions change.
+The model was trained on data from Taiwan in 2005. Performance may not generalize to a different credit market, regulatory environment, or economic cycle.
 
----
+The 23 features available here (credit limit, demographics, monthly payment status and amounts) are a subset of what a real underwriting system would use. Production models typically incorporate bureau data, employment history, loan purpose, and behavioral signals not present in this dataset.
 
-## Next steps
+The cost assumptions are illustrative and do not account for loan size, interest rate, collateral, or recovery rate. Real cost analysis is considerably more complex.
 
-1. Replace synthetic cost figures with real estimates from the business.
-2. Evaluate the recommended threshold on a fresh holdout set or historical validation period.
-3. Conduct a fairness audit on the false positive rate by demographic group.
-4. Consider adding SHAP-based feature explanations to support individual loan decisions.
-5. Define a monitoring cadence and set alert thresholds for performance degradation.
+No resampling techniques (SMOTE, undersampling) were used. On more severely imbalanced datasets, resampling can improve minority class recall further.
+
+The model is not calibrated. The predicted probabilities are used only for ranking and threshold selection in this exercise, not as literal probability estimates of default.

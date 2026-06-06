@@ -16,7 +16,7 @@ def build_logistic_regression() -> Pipeline:
     ])
 
 
-def build_xgboost() -> XGBClassifier:
+def build_xgboost(scale_pos_weight: float = 1.0) -> XGBClassifier:
     return XGBClassifier(
         n_estimators=300,
         learning_rate=0.05,
@@ -25,6 +25,7 @@ def build_xgboost() -> XGBClassifier:
         colsample_bytree=0.8,
         eval_metric="logloss",
         random_state=RANDOM_STATE,
+        scale_pos_weight=scale_pos_weight,
         verbosity=0,
     )
 

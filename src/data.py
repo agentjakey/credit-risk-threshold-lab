@@ -1,25 +1,34 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from src.config import TARGET_COL, RANDOM_STATE, TEST_SIZE
+from src.config import TARGET_COL, RANDOM_STATE, TEST_SIZE, FEATURE_NAMES
+
+
+def load_uci_credit_dataset() -> pd.DataFrame:
+    from ucimlrepo import fetch_ucirepo
+    ds = fetch_ucirepo(id=350)
+    X = ds.data.features.copy()
+    y = ds.data.targets.copy()
+
+    X = X.rename(columns=FEATURE_NAMES)
+
+    df = X.copy()
+    df[TARGET_COL] = y.iloc[:, 0].values
+    return df
 
 
 def load_dataset(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-    return df
+    return pd.read_csv(path)
 
 
 def basic_cleaning(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    before = len(df)
+    df = df.drop_duplicates()
+    dupes_dropped = before - len(df)
+    before = len(df)
     df = df.dropna()
-    # Drop any non-numeric columns that were not explicitly one-hot encoded.
-    # Keeps the target column regardless of dtype.
-    non_numeric = [
-        col for col in df.columns
-        if df[col].dtype == object and col != TARGET_COL
-    ]
-    if non_numeric:
-        df = df.drop(columns=non_numeric)
-    return df
+    nulls_dropped = before - len(df)
+    return df, dupes_dropped, nulls_dropped
 
 
 def split_features_target(df: pd.DataFrame, target_col: str = TARGET_COL):
@@ -33,30 +42,11 @@ def train_test_split_data(X, y):
         X, y,
         test_size=TEST_SIZE,
         random_state=RANDOM_STATE,
-        stratify=y
+        stratify=y,
     )
 
 
-def generate_synthetic_dataset(n_samples: int = 5000, imbalance_ratio: float = 0.12) -> pd.DataFrame:
-    from sklearn.datasets import make_classification
-    import numpy as np
-
-    n_minority = int(n_samples * imbalance_ratio)
-    n_majority = n_samples - n_minority
-
-    X, y = make_classification(
-        n_samples=n_samples,
-        n_features=15,
-        n_informative=8,
-        n_redundant=3,
-        n_repeated=0,
-        n_classes=2,
-        weights=[1 - imbalance_ratio, imbalance_ratio],
-        flip_y=0.01,
-        random_state=42,
-    )
-
-    feature_names = [f"feature_{i}" for i in range(X.shape[1])]
-    df = pd.DataFrame(X, columns=feature_names)
-    df[TARGET_COL] = y
-    return df
+def compute_scale_pos_weight(y_train) -> float:
+    n_neg = (y_train == 0).sum()
+    n_pos = (y_train == 1).sum()
+    return round(n_neg / n_pos, 4)

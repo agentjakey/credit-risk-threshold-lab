@@ -1,0 +1,2 @@
+threshold,accuracy,precision,recall,f1,true_positives,true_negatives,false_positives,false_negatives,predicted_positive_rate,expected_cost,model,roc_auc,pr_auc,selected
+0.2,0.356082,0.251521,0.966817,0.39919,1282.0,852.0,3815.0,44.0,0.850492,2127500.0,XGBoost,0.775705,0.555718,True
