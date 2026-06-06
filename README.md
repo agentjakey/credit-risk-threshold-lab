@@ -8,7 +8,7 @@ This project trains logistic regression and XGBoost on the UCI Default of Credit
 
 ## Why accuracy is not enough
 
-The dataset has 22.13% defaulters and 77.87% non-defaulters. A model that predicts "no default" for every applicant achieves 77.87% accuracy and catches zero actual defaults. That is the naive baseline -- and it is the bar any real model must beat meaningfully, not just numerically.
+The dataset has 22.13% defaulters and 77.87% non-defaulters. A model that predicts "no default" for every applicant achieves 77.87% accuracy and catches zero actual defaults. That is the naive baseline, and it is the bar any real model must beat meaningfully, not just numerically.
 
 Accuracy rewards the majority class. In credit risk, the minority class (defaults) is exactly what we care about catching. The right question is not "what fraction of predictions are correct overall?" but "given what each type of mistake costs, at what threshold should we flag a borrower as high-risk?"
 
@@ -78,8 +78,8 @@ XGBoost outperforms logistic regression on every metric at t=0.50, with a ROC-AU
 
 We swept thresholds from 0.05 to 0.95 in steps of 0.05 and computed expected cost at each threshold using illustrative assumed costs:
 
-- **False positive cost: $500** (a creditworthy borrower is flagged as risky -- potential lost business, operational review cost)
-- **False negative cost: $5,000** (a defaulting borrower receives a loan they do not repay -- lender absorbs the loss)
+- **False positive cost: $500** (a creditworthy borrower is flagged as risky; potential lost business and operational review cost)
+- **False negative cost: $5,000** (a defaulting borrower receives a loan they do not repay; the lender absorbs the loss)
 
 These cost figures are example assumptions for this exercise. They are not real lender values. Actual cost analysis requires input from credit risk, finance, and compliance teams.
 
@@ -230,11 +230,31 @@ credit-risk-threshold-lab/
 
 ## What I learned
 
-The naive baseline is the sharpest illustration of the accuracy problem. 77.87% accuracy sounds reasonable. It is achieved by a model that has learned nothing, predicts nothing useful, and would approve every loan regardless of risk. Any model that beats this number on accuracy alone is not necessarily better -- the logistic regression at t=0.50 scores below the naive baseline on accuracy (68.65%) while being dramatically more useful for the actual task.
+The naive baseline is the sharpest illustration of the accuracy problem. 77.87% accuracy sounds reasonable. It is achieved by a model that has learned nothing, predicts nothing useful, and would approve every loan regardless of risk. Any model that beats this number on accuracy alone is not necessarily better; the logistic regression at t=0.50 scores below the naive baseline on accuracy (68.65%) while being dramatically more useful for the actual task.
 
-The threshold sweep showed that the cost-minimizing threshold is not 0.50 for either model. The optimal XGBoost threshold of 0.20 catches 96.68% of defaults at the cost of a very high false positive rate. Whether that tradeoff is right depends entirely on the actual ratio of default loss to review cost -- which is a business question, not a modeling question.
+The threshold sweep showed that the cost-minimizing threshold is not 0.50 for either model. The optimal XGBoost threshold of 0.20 catches 96.68% of defaults at the cost of a very high false positive rate. Whether that tradeoff is right depends entirely on the actual ratio of default loss to review cost, which is a business question, not a modeling question.
 
 The most important feature by a large margin is PAY_0, the repayment status in the most recent month. This makes intuitive sense and is reassuring: the model is not relying on demographic proxies but on payment behavior.
+
+---
+
+## Limitations
+
+This project is a portfolio exercise. It is not production-ready and has not been validated for operational use in a lending context.
+
+The positive class is `default = 1` (borrower defaulted). The negative class is `default = 0` (borrower repaid). The model outputs a probability score; higher scores indicate higher predicted default risk.
+
+Specific limitations to be aware of before any operational use:
+
+The model is not calibrated. Predicted probabilities are used for ranking and threshold selection only. They should not be interpreted as literal estimates of the probability of default without further calibration work.
+
+The dataset is from Taiwan credit card holders observed in 2005. Generalization to other markets, lending products, or economic environments has not been tested.
+
+No fairness audit has been performed. False positive rates have not been compared across demographic subgroups (SEX, EDUCATION, MARRIAGE, AGE). In a regulated lending context this is a necessary step before deployment.
+
+The cost figures ($500 FP, $5,000 FN) are illustrative assumptions chosen to demonstrate the methodology. They are not derived from real loan portfolio data. The selected threshold of 0.20 would shift materially if real cost estimates were used.
+
+No resampling techniques (SMOTE, undersampling) were applied. On more severely imbalanced datasets, these can improve minority class recall.
 
 ---
 
